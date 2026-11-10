@@ -833,13 +833,27 @@ h2{font-size:1.25rem}h3{font-size:1rem}
 (function () {
   'use strict';
   const SKEY = 'gamehub.session';
-  const base = () => (window.GAMEHUB_SERVER || '').replace(/\/$/, '');
+  const SRV_KEY = 'gamehub.server';
+  const base = () => {
+    let v = window.GAMEHUB_SERVER || '';
+    if (!v) { try { v = localStorage.getItem(SRV_KEY) || ''; } catch (e) { v = ''; } }
+    return v.trim().replace(/\/$/, '');
+  };
 
   const Net = {
     socket: null, ice: [{ urls: 'stun:stun.l.google.com:19302' }], handlers: {},
     pid: null, code: null,
     on(ev, fn) { (this.handlers[ev] = this.handlers[ev] || []).push(fn); },
     fire(ev, a, b) { (this.handlers[ev] || []).forEach(fn => { try { fn(a, b); } catch (e) { console.error(e); } }); },
+    serverUrl() { return base(); },
+    setServer(url) {
+      url = (url || '').trim();
+      if (url && !/^https?:\/\//i.test(url)) url = (/^(localhost|\d+\.\d+\.\d+\.\d+)/.test(url) ? 'http://' : 'https://') + url;
+      try { url ? localStorage.setItem(SRV_KEY, url.replace(/\/$/, '')) : localStorage.removeItem(SRV_KEY); } catch (e) { /* ignore */ }
+      if (this.socket) { this.socket.close(); this.socket = null; }
+      window.io = undefined;
+      return base();
+    },
     saved() { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) { return null; } },
     save(s) { try { s ? localStorage.setItem(SKEY, JSON.stringify(s)) : localStorage.removeItem(SKEY); } catch (e) { /* private mode */ } },
 
@@ -847,10 +861,14 @@ h2{font-size:1.25rem}h3{font-size:1rem}
       return new Promise((resolve, reject) => {
         if (window.io) return resolve();
         const s = document.createElement('script');
+        const noServer = !base() && location.hostname.endsWith('vercel.app');
         s.src = base() + '/socket.io/socket.io.js';
-        const timer = setTimeout(() => reject(new Error('The game server did not answer.')), 12000);
+        const timer = setTimeout(() => { s.remove(); reject(new Error('The game server did not answer. Check the server address.')); }, 45000);
         s.onload = () => { clearTimeout(timer); window.io ? resolve() : reject(new Error('Server client missing.')); };
-        s.onerror = () => { clearTimeout(timer); reject(new Error('Cannot reach the game server. Offline games still work!')); };
+        s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error(base()
+          ? 'Cannot reach the game server at ' + base() + '. Is it running? Offline games still work!'
+          : (noServer ? 'Online rooms need the multiplayer server, which is not connected to this website yet. Open "Server address" below and paste your server link. Offline games still work!'
+                      : 'Cannot reach the game server. Offline games still work!'))); };
         document.head.appendChild(s);
       });
     },
@@ -880,9 +898,10 @@ h2{font-size:1.25rem}h3{font-size:1rem}
       socket.on('voice:signal', (m) => Voice.onSignal(m));
       socket.on('voice:left', (pid) => Voice.drop(pid));
       await new Promise((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error('Connection timed out.')), 12000);
+        const fail = (msg) => { clearTimeout(t); try { socket.close(); } catch (e) { /* ignore */ } if (Net.socket === socket) Net.socket = null; reject(new Error(msg)); };
+        const t = setTimeout(() => fail('Connection timed out. The server may be asleep – try again in a minute.'), 45000);
         socket.once('connect', () => { clearTimeout(t); resolve(); });
-        socket.once('connect_error', () => { clearTimeout(t); reject(new Error('Cannot reach the game server.')); });
+        socket.once('connect_error', () => fail('Cannot reach the game server.'));
       });
     },
 
@@ -1337,9 +1356,11 @@ h2{font-size:1.25rem}h3{font-size:1rem}
     const guard = async (fn, btn) => {
       err.textContent = ''; btn.disabled = true;
       Voice.prepare();                       // voice is on by default: ask for the mic during this tap
+      const slow = setTimeout(() => { if (btn.disabled) err.textContent = '⏳ Connecting… a free server can take up to a minute to wake up.'; }, 4000);
       let ok = false;
       try { const r = await fn(); if (!r.ok) err.textContent = r.error || 'Something went wrong.'; else { ok = true; enterRoom(r); } }
-      catch (e) { err.textContent = e.message || 'Could not connect.'; }
+      catch (e) { err.textContent = e.message || 'Could not connect.'; const d = document.querySelector('details.card'); if (d && /server/i.test(err.textContent)) d.open = true; }
+      clearTimeout(slow);
       if (!ok) Voice.cancelPrepare();
       btn.disabled = false;
     };
@@ -1355,7 +1376,18 @@ h2{font-size:1.25rem}h3{font-size:1rem}
       h('div', { class: 'card' }, h('h3', { text: 'Your name' }), nameIn),
       h('div', { class: 'card' }, h('h3', { text: 'Create a room' }), h('p', { class: 'mute small', text: 'Pick a game, then share the room code with your friends.' }), gameSel, h('div', { style: 'height:10px' }), bCreate),
       h('div', { class: 'card' }, h('h3', { text: 'Join a friend' }), codeIn, h('div', { style: 'height:10px' }), bJoin),
-      err, h('button', { class: 'btn sec', text: '← Back', on: { click: viewHome } }));
+      err, serverBox(err), h('button', { class: 'btn sec', text: '← Back', on: { click: viewHome } }));
+  }
+  function serverBox(err) {
+    const cur = Net.serverUrl();
+    const inp = h('input', { value: window.GAMEHUB_SERVER ? '' : cur, placeholder: 'https://your-server.onrender.com', 'aria-label': 'Server address', disabled: !!window.GAMEHUB_SERVER, autocapitalize: 'off', spellcheck: 'false' });
+    const state = h('div', { class: 'mute small', style: 'margin-top:6px', text: cur ? 'Using: ' + cur : 'Using this website as the server.' });
+    return h('details', { class: 'card' },
+      h('summary', { style: 'cursor:pointer;font-weight:700', text: '⚙️ Server address (for online rooms)' }),
+      h('p', { class: 'mute small', text: 'Online rooms need the multiplayer server. If this website is hosted without it (for example on Vercel), paste the link of your server here once.' }),
+      inp, h('div', { class: 'row', style: 'margin-top:8px' },
+        h('button', { class: 'btn sm', text: 'Save', disabled: !!window.GAMEHUB_SERVER, on: { click: () => { const u = Net.setServer(inp.value); state.textContent = u ? 'Using: ' + u : 'Using this website as the server.'; toast(u ? 'Server saved' : 'Server cleared', 'good'); } } }),
+        h('button', { class: 'btn sm sec', text: 'Test', on: { click: async (e) => { e.target.disabled = true; state.textContent = 'Testing…'; try { await Net.connect(); state.textContent = '✅ Connected! Online rooms are ready.'; } catch (x) { state.textContent = '❌ ' + (x.message || 'Could not connect'); } e.target.disabled = false; } } })), state);
   }
 
   function enterRoom(r) {
