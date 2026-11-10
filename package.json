@@ -1,0 +1,17 @@
+{
+  "name": "game-hub",
+  "version": "2.0.0",
+  "description": "Ludo + Tic-Tac-Toe, Connect Four, Rock Paper Scissors and Truth or Dare. Play offline (works as an installable PWA) or online with friends in private rooms with text and voice chat.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "test": "node test/logic.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "license": "MIT"
+}

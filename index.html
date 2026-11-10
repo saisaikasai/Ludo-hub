@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>Game Hub – Ludo &amp; Party Games</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="btn-home" class="logo" aria-label="Home">🎲 <span>Game Hub</span></button>
+    <div class="top-right">
+      <span id="net-badge" class="badge" hidden></span>
+      <button id="btn-sound" class="icon-btn" aria-label="Toggle sound">🔊</button>
+    </div>
+  </header>
+
+  <main id="layout">
+    <section id="stage"></section>
+    <aside id="social" hidden></aside>
+  </main>
+
+  <button id="mic-fab" class="fab mic" hidden aria-label="Mute microphone">🎤</button>
+  <button id="social-fab" class="fab" hidden aria-label="Open chat">💬<i id="unread" hidden>0</i></button>
+  <div id="reactions" aria-hidden="true"></div>
+  <div id="emoji-bar" hidden role="toolbar" aria-label="Send a reaction"></div>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="overlay" hidden></div>
+  <div id="audio-sink"></div>
+
+  <noscript>This app needs JavaScript.</noscript>
+  <script src="config.js"></script>
+  <script src="js/logic.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
